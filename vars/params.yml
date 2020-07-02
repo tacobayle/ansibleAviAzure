@@ -1,0 +1,374 @@
+---
+rg:
+  - name: rg-avi
+    location: westeurope
+  # - name: rg-team1
+  #   location: westeurope
+  # - name: rg-team2
+  #   location: westeurope
+  # - name: rg-team3
+  #   location: westeurope
+
+vnet:
+  - name: vnet-avi
+    rg: rg-avi
+    cidr: 172.16.0.0/19
+    subnet:
+      - name: subnet1
+        cidr: 172.16.1.0/24
+      - name: subnet2
+        cidr: 172.16.2.0/24
+      - name: subnet3
+        cidr: 172.16.3.0/24
+  # - name: vnet-team1
+  #   rg: rg-team1
+  #   cidr: 172.16.32.0/19
+  #   subnet:
+  #     - name: subnet3
+  #       cidr: 172.16.32.0/24
+  # - name: vnet-team2
+  #   rg: rg-team2
+  #   cidr: 172.16.64.0/19
+  #   subnet:
+  #     - name: subnet4
+  #       cidr: 172.16.64.0/24
+  # - name: vnet-team3
+  #   rg: rg-team3
+  #   cidr: 172.16.96.0/19
+  #   subnet:
+  #     - name: subnet5
+  #       cidr: 172.16.96.0/24
+
+
+# virtualNetworkPeering:
+#   - prefixName: peering
+#     rg: rg-avi
+#     vnet: vnet-avi
+#     remoteRg: rg-team1
+#     remoteVnet: vnet-team1
+  # - prefixName: peering
+  #   rg: rg-avi
+  #   vnet: vnet-avi
+  #   remoteRg: rg-team2
+  #   remoteVnet: vnet-team2
+  # - prefixName: peering
+  #   rg: rg-avi
+  #   vnet: vnet-avi
+  #   remoteRg: rg-team3
+  #   remoteVnet: vnet-team3
+  # - prefixName: peering
+  #   rg: rg-team1
+  #   vnet: vnet-team1
+  #   remoteRg: rg-avi
+  #   remoteVnet: vnet-avi
+  # - prefixName: peering
+  #   rg: rg-team2
+  #   vnet: vnet-team2
+  #   remoteRg: rg-avi
+  #   remoteVnet: vnet-avi
+  # - prefixName: peering
+  #   rg: rg-team3
+  #   vnet: vnet-team3
+  #   remoteRg: rg-avi
+  #   remoteVnet: vnet-avi
+
+securityGroup:
+  - name: sg-web
+    rg: rg-avi
+    rules:
+    - name: ssh
+      protocol: Tcp
+      dest_port: "22"
+      priority: "101"
+      direction: Inbound
+    - name: http
+      protocol: Tcp
+      dest_port: "80"
+      priority: "102"
+      direction: Inbound
+  # - name: sg-web
+  #   rg: rg-team2
+  #   rules:
+  #   - name: ssh
+  #     protocol: Tcp
+  #     dest_port: "22"
+  #     priority: "101"
+  #     direction: Inbound
+  #   - name: http
+  #     protocol: Tcp
+  #     dest_port: "80"
+  #     priority: "102"
+  #     direction: Inbound
+  # - name: sg-web
+  #   rg: rg-team3
+  #   rules:
+  #   - name: ssh
+  #     protocol: Tcp
+  #     dest_port: "22"
+  #     priority: "101"
+  #     direction: Inbound
+  #   - name: http
+  #     protocol: Tcp
+  #     dest_port: "80"
+  #     priority: "102"
+  #     direction: Inbound
+  - name: sg-avi
+    rg: rg-avi
+    rules:
+    - name: ssh
+      protocol: Tcp
+      dest_port: "22"
+      priority: "101"
+      direction: Inbound
+    - name: http
+      protocol: Tcp
+      dest_port: "80"
+      priority: "102"
+      direction: Inbound
+    - name: https
+      protocol: Tcp
+      dest_port: "443"
+      priority: "103"
+      direction: Inbound
+    - name: tcp8443
+      protocol: Tcp
+      dest_port: "8443"
+      priority: "104"
+      direction: Inbound
+    - name: udp123
+      protocol: Udp
+      dest_port: "123"
+      priority: "105"
+      direction: Inbound
+    - name: tcp5098
+      protocol: Tcp
+      dest_port: "5098"
+      priority: "106"
+      direction: Inbound
+
+sa:
+  prefixName: storageavi
+
+# scaleset:
+#   - name: vmScaleset1Team3
+#     rg: rg-team3
+#     size: Standard_B1s
+#     capacity: 2
+#     vnet: vnet-team3
+#     subnet: subnet5
+#     offer: "UbuntuServer"
+#     publisher: "Canonical"
+#     sku: "16.04-LTS"
+#     version: "latest"
+#     securityGroup: sg-web
+#     upgradePolicy: Manual
+
+vm:
+  - name: jump
+    size: Standard_B1s
+    offer: "UbuntuServer"
+    publisher: "Canonical"
+    sku: "16.04-LTS"
+    version: "latest"
+    marketplace: false
+    hostGroup: jump
+    subnet:
+      - name: subnet1
+        securityGroup: sg-avi
+        vnet: vnet-avi
+      # - name: subnet2
+      #   securityGroup: sg-avi
+      #   vnet: avi-vnet
+    rg: rg-avi
+    ipForwarding: true
+  - name: controller1
+    size: Standard_DS4_v2
+    offer: avi-vantage-adc
+    publisher: avi-networks
+    sku: avi-vantage-adc-1802
+    version: 18.02.08
+    marketplace: true
+    hostGroup: controller
+    subnet:
+      - name: subnet1
+        securityGroup: sg-avi
+        vnet: vnet-avi
+    rg: rg-avi
+    ipForwarding: false
+  # - name: controller2
+  #   size: Standard_DS4_v2
+  #   offer: "avi-vantage-adc"
+  #   publisher: "avi-networks"
+  #   sku: "avi-vantage-adc-byol"
+  #   # version: "17.2.14"
+  #   marketplace: true
+  #   hostGroup: controller
+  #   subnet:
+  #     - name: subnet1
+  #       securityGroup: sg-avi
+  #       vnet: vnet-avi
+  #   rg: rg-avi
+  #   ipForwarding: false
+  # - name: controller3
+  #   size: Standard_DS4_v2
+  #   offer: "avi-vantage-adc"
+  #   publisher: "avi-networks"
+  #   sku: "avi-vantage-adc-byol"
+  #   # version: "17.2.14"
+  #   marketplace: true
+  #   hostGroup: controller
+  #   subnet:
+  #     - name: subnet1
+  #       securityGroup: sg-avi
+  #       vnet: vnet-avi
+  #   rg: rg-avi
+  #   ipForwarding: false
+  - name: web1
+    size: Standard_B1s
+    marketplace: false
+    offer: "UbuntuServer"
+    publisher: "Canonical"
+    sku: "16.04-LTS"
+    version: "latest"
+    hostGroup: webA
+    subnet:
+      - name: subnet2
+        securityGroup: sg-web
+        vnet: vnet-avi
+    rg: rg-avi
+    ipForwarding: false
+    userData: |
+      #!/bin/bash
+      ifPrimary=`ip route | grep default | sed -e "s/^.*dev.//" -e "s/.proto.*//"`
+      ip=$(ifconfig $ifPrimary | grep 'inet addr' | awk -F: '{print $2}' | awk '{print $1}')
+      name=`hostname`
+      while true; do echo -e "HTTP/1.0 200 OK\r\n\r\nWelcome to $name [$ip] in Azure!" | sudo nc -l -p 80 ; done&
+  - name: web2
+    size: Standard_B1s
+    marketplace: false
+    offer: "UbuntuServer"
+    publisher: "Canonical"
+    sku: "16.04-LTS"
+    version: "latest"
+    hostGroup: webA
+    subnet:
+      - name: subnet2
+        securityGroup: sg-web
+        vnet: vnet-avi
+    rg: rg-avi
+    ipForwarding: false
+    userData: |
+      #!/bin/bash
+      ifPrimary=`ip route | grep default | sed -e "s/^.*dev.//" -e "s/.proto.*//"`
+      ip=$(ifconfig $ifPrimary | grep 'inet addr' | awk -F: '{print $2}' | awk '{print $1}')
+      name=`hostname`
+      while true; do echo -e "HTTP/1.0 200 OK\r\n\r\nWelcome to $name [$ip] in Azure!" | sudo nc -l -p 80 ; done&
+  # - name: web1team2
+  #   size: Standard_B1s
+  #   marketplace: false
+  #   offer: "UbuntuServer"
+  #   publisher: "Canonical"
+  #   sku: "16.04-LTS"
+  #   version: "latest"
+  #   hostGroup: webB
+  #   subnet:
+  #     - name: subnet4
+  #       securityGroup: sg-web
+  #       vnet: vnet-team2
+  #   rg: rg-team2
+  #   ipForwarding: false
+  #   userData: |
+  #     #!/bin/bash
+  #     ifPrimary=`ip route | grep default | sed -e "s/^.*dev.//" -e "s/.proto.*//"`
+  #     ip=$(ifconfig $ifPrimary | grep 'inet addr' | awk -F: '{print $2}' | awk '{print $1}')
+  #     name=`hostname`
+  #     while true; do echo -e "HTTP/1.0 200 OK\r\n\r\nWelcome to $name [$ip] in Azure!" | sudo nc -l -p 80 ; done&
+  # - name: web2team2
+  #   size: Standard_B1s
+  #   marketplace: false
+  #   offer: "UbuntuServer"
+  #   publisher: "Canonical"
+  #   sku: "16.04-LTS"
+  #   version: "latest"
+  #   hostGroup: webB
+  #   subnet:
+  #     - name: subnet4
+  #       securityGroup: sg-web
+  #       vnet: vnet-team2
+  #   rg: rg-team2
+  #   ipForwarding: false
+  #   userData: |
+  #     #!/bin/bash
+  #     ifPrimary=`ip route | grep default | sed -e "s/^.*dev.//" -e "s/.proto.*//"`
+  #     ip=$(ifconfig $ifPrimary | grep 'inet addr' | awk -F: '{print $2}' | awk '{print $1}')
+  #     name=`hostname`
+  #     while true; do echo -e "HTTP/1.0 200 OK\r\n\r\nWelcome to $name [$ip] in Azure!" | sudo nc -l -p 80 ; done&
+#   - name: devstack
+# #    size: Standard_D2s_v3
+#     #size: Standard_D8s_v3
+#     size: Standard_D16s_v3
+#     offer: "UbuntuServer"
+#     publisher: "Canonical"
+#     sku: "16.04-LTS"
+#     version: "latest"
+#   - name: kvm
+# #    size: Standard_D2s_v3
+#     size: Standard_D8s_v3
+#     #size: Standard_D32s_v3
+#     offer: "UbuntuServer"
+#     publisher: "Canonical"
+#     sku: "16.04-LTS"
+#     version: "latest"
+
+routes:
+  - name: sshTunnel
+    cidr: 192.168.100.100/32
+    nexthop: jump
+    subnet: subnet1
+    subnetGw: 172.16.1.1
+    rg: rg-avi
+  # - name: devstackIPs
+  #   cidr: 11.1.1.0/24
+  #   nexthop: devstack
+  #   subnet: subnet1
+  #   subnetGw: 172.16.1.1
+  # - name: aviKvm
+  #   cidr: 200.1.1.0/24
+  #   nexthop: kvm
+  #   subnet: subnet1
+  #   subnetGw: 172.16.1.1
+
+ssh:
+  username: avi
+  privateKeyFile: /home/avi/.ssh/id_rsa.azure
+  authorizedKeysFile: "/home/avi/.ssh/authorized_keys"
+  sshPubKey: "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQDE1yEkrWAnnsODTzZZghrqXK2i0ZzSkgnbFW4h9gysNPTl09/K+doGQaeX07YMY7vbsVYDQT44nLhW1ysZcaDitUI/ECEIGI08etqGxEGziiPPY0Iw09I1FcxxrMHRcI4u/FBU98NhuUH9VY9zHT1Z/WR4/cG4Xn5wwOfoR1/dL1/x0kGyDL91aEGd930FVsxK6DmR6yHKHFrmrc3KGkhwUGfq2VIYCUA/NyBAC1++9o7Sm9nvB3aziil/Vs3J62Uz5KpcUT1SEe+TU8UI7BHLpZeWHceXWCasRUouX5813Mvc8S7tY/qnlFmRnntnVdHw8ekDwE02z16/NdLapU2n"
+  endpoint: "192.168.100.100"
+  endpointCloud: "192.168.100.101"
+  localPassword: "avi123"
+
+ansibleHost:
+  hostGroup:
+    - jump
+    - controller
+    - kvm
+    - webA
+    - webB
+  publicTemplate: hostsAzurePublicIp.j2
+  public:
+    - hostsAzurePublicIp
+    # - ../aviGslb/vars/hostsAzurePublicIp.yml
+  privateTemplate: hostsAzurePrivate.j2
+  private:
+    - ../aviAzureBootstrap/hosts
+    # - /home/avi/azure/hostsAzurePrivate
+    # - /home/avi/devstack/hostsAzurePrivate
+    # - /home/avi/aviKvm/hostsAzurePrivate
+    # - /home/avi/aviBootstrap/hostsAzurePrivate
+  username: avi
+
+avi:
+  credentialsFile:
+    - ../aviAzureBootstrap/vars/creds.yml
+  version: 18.2.8
+  #password: Avi_2020

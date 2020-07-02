@@ -1,0 +1,340 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars_files:
+    - "../../creds/credentialsAwsNicolasBayleAppAzure-api.yml"
+    - "vars/params.yml"
+
+  vars:
+    vmNameList: []
+    ifList: []
+    azureEnv:
+      AZURE_CLIENT_ID: "{{ azure.clientId }}"
+      AZURE_SECRET: "{{ azure.secret }}"
+      AZURE_SUBSCRIPTION_ID: "{{ azure.subscriptionId }}"
+      AZURE_TENANT: "{{ azure.tenant }}"
+
+  environment: "{{ azureEnv }}"
+
+  tasks:
+
+    - name: Create a resource group
+      azure_rm_resourcegroup:
+        name: "{{ item.name }}"
+        location: "{{ item.location }}"
+      ignore_errors: yes
+      loop: "{{ rg }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Create storage account
+      azure_rm_storageaccount:
+        resource_group: "{{ item.rg }}"
+        name: "{{ sa.prefixName }}{{ item.name }}"
+        account_type: Premium_LRS
+      loop: "{{ vm }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Create a virtual network
+      azure_rm_virtualnetwork:
+        name: "{{ item.name }}"
+        resource_group: "{{ item.rg }}"
+        address_prefixes_cidr: "{{ item.cidr }}"
+      loop: "{{ vnet }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+    # - name: Create virtual network peering
+    #   azure_rm_virtualnetworkpeering:
+    #     resource_group: "{{ item.rg }}"
+    #     name: "{{ item.prefixName }}-{{ item.remoteVnet }}"
+    #     virtual_network: "{{ item.vnet }}"
+    #     remote_virtual_network:
+    #       resource_group: "{{ item.remoteRg }}"
+    #       name: "{{ item.remoteVnet }}"
+    #     allow_virtual_network_access: true
+    #     allow_forwarded_traffic: true
+    #   loop: "{{ virtualNetworkPeering }}"
+    #   loop_control:
+    #     label: "Creating a peering between {{ item.vnet }} and {{ item.remoteVnet }}"
+    #   ignore_errors: yes
+
+    - name: Create an empty routing table for each subnet
+      azure_rm_routetable:
+        name: "route-{{ item.1.name }}"
+        resource_group: "{{ item.0.rg }}"
+        disable_bgp_route_propagation: False
+      with_subelements:
+        - "{{ vnet }}"
+        - subnet
+      loop_control:
+        label: "{{ item.1.name }}"
+
+    - name: Create a subnet
+      azure_rm_subnet:
+        name: "{{ item.1.name }}"
+        virtual_network_name: "{{ item.0.name }}"
+        resource_group: "{{ item.0.rg }}"
+        address_prefix_cidr: "{{ item.1.cidr }}"
+        route_table: "route-{{ item.1.name }}"
+      with_subelements:
+        - "{{ vnet }}"
+        - subnet
+      loop_control:
+        label: "{{ item.1.name }}"
+
+    - name: Create public IP addresses
+      azure_rm_publicipaddress:
+        resource_group: "{{ item.0.rg }}"
+        name: "{{ item.0.name }}-{{ item.1.name }}-pubIp"
+        allocation_method: Static
+      with_subelements:
+        - "{{ vm }}"
+        - subnet
+      loop_control:
+        label: "Vm {{ item.0.name }} for subnet called {{ item.1.name }}"
+
+    - name: Create security group
+      azure_rm_securitygroup:
+        resource_group: "{{ item.0.rg }}"
+        name: "{{ item.0.name }}"
+        rules:
+          - name: "{{ item.1.name }}"
+            protocol: "{{ item.1.protocol }}"
+            destination_port_range: "{{ item.1.dest_port }}"
+            access: Allow
+            priority: "{{ item.1.priority }}"
+            direction: "{{ item.1.direction }}"
+      with_subelements:
+        - "{{ securityGroup }}"
+        - rules
+      loop_control:
+        label: "securityGroup {{ item.0.name }} for rule {{ item.1.name }} for resource group {{ item.0.rg }}"
+
+    # - name: Create Virtual Machine Scale Set
+    #   azure_rm_virtualmachine_scaleset:
+    #     resource_group: "{{ item.rg }}"
+    #     name: "{{ item.name }}"
+    #     upgrade_policy: "{{ item.upgradePolicy }}"
+    #     vm_size: "{{ item.size }}"
+    #     capacity: "{{ item.capacity }}"
+    #     virtual_network_name: "{{ item.vnet }}"
+    #     subnet_name: "{{ item.subnet }}"
+    #     admin_username: "{{ ssh.username }}"
+    #     ssh_password_enabled: no
+    #     ssh_public_keys:
+    #       - path: "{{ ssh.authorizedKeysFile }}"
+    #         key_data: "{{ ssh.sshPubKey }}"
+    #     security_group: "{{ item.securityGroup }}"
+    #     managed_disk_type: Standard_LRS
+    #     image:
+    #       offer: "{{ item.offer }}"
+    #       publisher: "{{ item.publisher }}"
+    #       sku: "{{ item.sku }}"
+    #       version: "{{ item.version }}"
+    #     data_disks:
+    #       - lun: 0
+    #         disk_size_gb: 16
+    #         caching: ReadWrite
+    #         managed_disk_type: Standard_LRS
+    #   loop: "{{ scaleset }}"
+    #   loop_control:
+    #     label: "scale set {{ item.name }}"
+    #   ignore_errors: yes
+    #   when: scaleset is defined
+
+    - name: Create a network interface
+      azure_rm_networkinterface:
+        name: "{{ item.0.name }}-{{ item.1.name }}-if"
+        resource_group: "{{ item.0.rg }}"
+        virtual_network: "{{ item.1.vnet }}"
+        subnet_name: "{{ item.1.name }}"
+        security_group: "{{ item.1.securityGroup }}"
+        enable_ip_forwarding: "{{ item.0.ipForwarding }}"
+        ip_configurations:
+          - name: "ifconfig-{{ item.1.name }}"
+            public_ip_allocation_method: Static
+            public_ip_address_name: "{{ item.0.name }}-{{ item.1.name }}-pubIp"
+      with_subelements:
+        - "{{ vm }}"
+        - subnet
+      loop_control:
+        label: "NIC {{ item.0.name }} for subnet called {{ item.1.name }} with security group called {{ item.1.securityGroup }}"
+
+    - name: Append Nic to list - will be fitered during VM creation
+      set_fact:
+        ifList: "{{ ifList }} + [ '{{ item.0.name }}-{{ item.1.name }}-if' ]"
+      with_subelements:
+        - "{{ vm }}"
+        - subnet
+      loop_control:
+        label: "{{ item.0.name }}"
+
+    - name: Create VMs (not marketplace based)
+      azure_rm_virtualmachine:
+        resource_group: "{{ item.rg }}"
+        name: "{{ item.name }}"
+        vm_size: "{{ item.size }}"
+        admin_username: "{{ ssh.username }}"
+        storage_account_name: "{{ sa.prefixName }}{{ item.name }}"
+        ssh_password_enabled: no
+        ssh_public_keys:
+          - path: "{{ ssh.authorizedKeysFile }}"
+            key_data: "{{ ssh.sshPubKey }}"
+        network_interface_names: "{{ ifList | select('match', item.name) | list }}"
+        image:
+          offer: "{{ item.offer }}"
+          publisher: "{{ item.publisher }}"
+          sku: "{{ item.sku }}"
+          version: "{{ item.version }}"
+        custom_data: "{{ item.userData | default('') }}"
+      loop: "{{ vm }}"
+      when: not item.marketplace
+      loop_control:
+       label: "{{ item.name }}"
+
+    - name: Create VMs (marketplace based)
+      azure_rm_virtualmachine:
+        resource_group: "{{ item.rg }}"
+        name: "{{ item.name }}"
+        vm_size: "{{ item.size }}"
+        admin_username: "{{ ssh.username }}"
+        storage_account_name: "{{ sa.prefixName }}{{ item.name }}"
+        ssh_password_enabled: no
+        ssh_public_keys:
+          - path: "{{ ssh.authorizedKeysFile }}"
+            key_data: "{{ ssh.sshPubKey }}"
+        network_interface_names: "{{ ifList | select('match', item.name) | list }}"
+        image:
+          offer: "{{ item.offer }}"
+          publisher: "{{ item.publisher }}"
+          sku: "{{ item.sku }}"
+          version: "{{ item.version }}"
+        plan:
+          publisher: "{{ item.publisher }}"
+          product: "{{ item.offer }}"
+          name: "{{ item.sku }}"
+      loop: "{{ vm }}"
+      when: item.marketplace
+      loop_control:
+       label: "{{ item.name }}"
+      tags: avi
+
+
+    - name: Get facts for all NIC
+      azure_rm_networkinterface_facts:
+        resource_group: "{{ item.name }}"
+      register: nicFacts
+      ignore_errors: yes
+      loop: "{{ rg }}"
+
+    # - debug: var=nicFacts
+
+    - name: Populate a dictionary with all private IP
+      set_fact:
+        dictPrivateIp: "{{ dictPrivateIp | default({}) | combine( {item.1.name: \
+        item.1.properties.ipConfigurations.0.properties.privateIPAddress} ) }}"
+      with_subelements:
+        - "{{ nicFacts.results }}"
+        - ansible_facts.azure_networkinterfaces
+      register: dictPrivateIp
+      loop_control:
+       label: "{{ item.1.name }}"
+
+    # - debug: var=dictPrivateIp
+
+    - name: Populate routing tables (for each subnet)
+      azure_rm_route:
+        name: "{{ item.name }}"
+        resource_group: "{{ item.rg }}"
+        address_prefix: "{{ item.cidr }}"
+        next_hop_type: virtual_appliance
+        route_table_name: "route-{{ item.subnet }}"
+        next_hop_ip_address: "{{ dictPrivateIp[item.nexthop + '-' + item.subnet + '-if'] }}"
+      loop: "{{ routes }}"
+      loop_control:
+       label: "{{ item.name }}"
+      ignore_errors: yes
+
+    - debug: var=dictPrivateIp
+
+
+    - name: generate a list Private IP addresses
+      command: python3 IpModifyDict2List.py vars/params.yml "{{ dictPrivateIp }}" -if
+      delegate_to: 127.0.0.1
+      register: listIpPrivate
+
+    - set_fact:
+        privateIpList: "{{ listIpPrivate.stdout | from_json }}"
+
+    # - debug: var=jsonListIpPrivate
+
+    - name: generate a list of dictionary to create an ansible host inventory for private IPs per group
+      command: python3 generateListDict.py vars/params.yml "{{ privateIpList }}"
+      delegate_to: 127.0.0.1
+      register: listPrivate
+
+    - set_fact:
+        jsonListPrivate: "{{ listPrivate.stdout | from_json }}"
+
+    - name: Create an ansible inventory host file for private IP
+      template:
+        src: "{{ ansibleHost.privateTemplate }}"
+        dest: "{{ item }}"
+      delegate_to: 127.0.0.1
+      ignore_errors: yes
+      loop: "{{ ansibleHost.private }}"
+
+    - name: Get facts for Public IPs
+      azure_rm_publicipaddress_facts:
+        resource_group: "{{ item.name }}"
+      register: ipFacts
+      loop: "{{ rg }}"
+
+    - name: Populate a dictionary with all Public IP
+      set_fact:
+        dictPublicIp: "{{ dictPublicIp | default({}) | combine( {item.1.name: \
+        item.1.properties.ipAddress} ) }}"
+      with_subelements:
+        - "{{ ipFacts.results }}"
+        - ansible_facts.azure_publicipaddresses
+      register: dictPublicIp
+      loop_control:
+       label: "{{ item.1.name }}"
+
+    # - debug: var=dictPublicIp
+
+    - name: generate a list Public IP address
+      command: python3 IpModifyDict2List.py vars/params.yml "{{ dictPublicIp }}" -pubIp
+      delegate_to: 127.0.0.1
+      register: listPublic
+
+    - set_fact:
+        jsonListPublic: "{{ listPublic.stdout | from_json }}"
+
+    - name: Append VM Name in the list
+      set_fact:
+        vmNameList: "{{ vmNameList }} + [ '{{ item.name }}' ]"
+      loop: "{{ vm }}"
+      loop_control:
+       label: "{{ item.name }}"
+
+    - name: Create an ansible inventory host file for public IP
+      template:
+        src: "{{ ansibleHost.publicTemplate }}"
+        dest: "{{ item }}"
+      delegate_to: 127.0.0.1
+      ignore_errors: yes
+      loop: "{{ ansibleHost.public }}"
+
+    - name: generate Avi creds.yml file with private IP
+      command: "python3 generateCreds.py {{ ansibleHost.private.0 }} {{ avi.version }} {{ item }}"
+      delegate_to: 127.0.0.1
+      loop: "{{ avi.credentialsFile }}"
+
+    - name: generate Backend server Yaml file with IP
+      command: "python3 python/exportAzureDatas.py {{ ansibleHost.private.0 }} ../aviAzureCloud/vars/azureDatas.yml"
+      delegate_to: 127.0.0.1

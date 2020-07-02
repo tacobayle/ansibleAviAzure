@@ -1,0 +1,17 @@
+# powershell command to get marketplace details and to accept T&Cs
+
+$locName="<Azure location, such as West US>"
+Get-AzureRMVMImagePublisher -Location $locName | Select PublisherName
+
+
+$pubName="avi-networks"
+Get-AzureRMVMImageOffer -Location $locName -Publisher $pubName | Select Offer
+
+$offerName="avi-vantage-adc"
+Get-AzureRMVMImageSku -Location $locName -Publisher $pubName -Offer $offerName | Select Skus
+
+$skuName="avi-vantage-adc-byol"
+Get-AzureRMVMImage -Location $locName -Publisher $pubName -Offer $offerName -Sku $skuName | Select Version
+
+
+Get-AzureRmMarketplaceTerms -Publisher "avi-networks" -Product "avi-vantage-adc" -Name "avi-vantage-adc-byol" | Set-AzureRmMarketplaceTerms -Accept

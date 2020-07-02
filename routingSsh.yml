@@ -1,0 +1,77 @@
+---
+- hosts: all
+  gather_facts: no
+  become_user: root
+  become_method: sudo
+  become: true
+
+  vars_files:
+    # - "../creds/azure.yml"
+    - "vars/params.yml"
+
+  tasks:
+
+  # - name: Populate IP route on each host
+  #   command: "ip route add {{ item.cidr }} via {{ item.subnetGw }}"
+  #   loop: "{{ routes }}"
+  #   when: inventory_hostname != item.nexthop
+  #   ignore_errors: yes
+
+
+# This part will be executed only for the host 'jump' to create the ssh VPN
+
+- hosts: jump
+  gather_facts: no
+  become_user: root
+  become_method: sudo
+
+  vars_files:
+    - "vars/params.yml"
+
+  vars:
+    ansible_become_pass: "{{ ssh.localPassword }}"
+
+
+  tasks:
+
+  - name: Update sshd_config
+    become: true
+    lineinfile:
+      dest: /etc/ssh/sshd_config
+      line: "{{ item }}"
+    loop: ['PermitTunnel yes']
+
+  - name: restart sshd
+    become: true
+    service:
+      name: sshd
+      state: reloaded
+
+  - name: Creating Tunnel interfaces on localhost
+    become: true
+    shell: |
+      nohup ssh -i "{{ ssh.privateKeyFile }}" -o "StrictHostKeyChecking=no" -NTCf -w 0:0 "{{ ansible_host }}"
+    delegate_to: 127.0.0.1
+
+  - name: sleep for 2 seconds and continue with play
+    wait_for: timeout=2
+    delegate_to: localhost
+
+  - name: Creating Tunnel interfaces on localhost
+    become: true
+    shell: |
+      ip link set up dev tun0
+      ip addr add {{ ssh.endpoint }}/32 peer {{ ssh.endpointCloud }} dev tun0
+      ip route add {{ vnet.0.subnet.0.cidr }} via {{ ssh.endpointCloud }}
+    delegate_to: 127.0.0.1
+
+  - name: sleep for 2 seconds and continue with play
+    wait_for: timeout=2
+    delegate_to: localhost
+
+  - name: Creating Tunnel interfaces on remote host
+    become: true
+    shell: |
+      echo 1 | tee /proc/sys/net/ipv4/ip_forward
+      ip link set up dev tun0
+      ip addr add {{ ssh.endpointCloud }}/32 peer {{ ssh.endpoint }} dev tun0

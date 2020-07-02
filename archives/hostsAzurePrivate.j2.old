@@ -1,0 +1,11 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+---
+all:
+  hosts:
+  {% for name, ip in vmNameList|zip(privateIpList) %}
+    {{ name }}:
+      ansible_host: {{ ip }}
+  {% endfor %}
+  vars:
+    ansible_user: "{{ ssh.username }}"
+    ansible_ssh_private_key_file: "{{ ssh.privateKeyFile }}"

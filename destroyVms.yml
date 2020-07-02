@@ -1,0 +1,103 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars_files:
+    - "../creds/azure.yml"
+    - "vars/params.yml"
+
+  vars:
+    azureEnv:
+      AZURE_CLIENT_ID: "{{ azure.clientId }}"
+      AZURE_SECRET: "{{ azure.secret }}"
+      AZURE_SUBSCRIPTION_ID: "{{ azure.subscriptionId }}"
+      AZURE_TENANT: "{{ azure.tenant }}"
+
+  environment: "{{ azureEnv }}"
+
+  tasks:
+
+      - name: Delete VMs
+        azure_rm_virtualmachine:
+          resource_group: "{{ rg.name }}"
+          name: "{{ item.name }}"
+          state: absent
+        loop: "{{ vm }}"
+      ignore_errors: yes
+
+
+      - name: Delete NICs
+        azure_rm_networkinterface:
+          name: "{{ item.1.name }}-{{ item.0.name }}-if"
+          resource_group: "{{ rg.name }}"
+          state: absent
+        with_nested:
+          - "{{ vnet.subnet }}"
+          - "{{ vm }}"
+      ignore_errors: yes
+
+
+      - name: Delete security groups
+        azure_rm_securitygroup:
+          resource_group: "{{ rg.name }}"
+          name: "sg-avi"
+          state: absent
+        loop: "{{ rules }}"
+      ignore_errors: yes
+
+
+      - name: Delete public IP addresses
+        azure_rm_publicipaddress:
+          resource_group: "{{ rg.name }}"
+          name: "{{ item.1.name }}-{{ item.0.name }}-pubIp"
+          state: absent
+        with_nested:
+          - "{{ vnet.subnet }}"
+          - "{{ vm }}"
+      ignore_errors: yes
+
+
+      - name: Delete a subnet
+        azure_rm_subnet:
+          name: "{{ item.name }}"
+          virtual_network_name: "{{ vnet.name }}"
+          resource_group: "{{ rg.name }}"
+          state: absent
+        loop: "{{ vnet.subnet }}"
+      ignore_errors: yes
+
+
+      - name: Delete an emty routing table for each subnet
+        azure_rm_routetable:
+          name: "route-{{ item.name }}"
+          resource_group: "{{ rg.name }}"
+          state: absent
+        loop: "{{ vnet.subnet }}"
+      ignore_errors: yes
+
+
+      - name: Delete virtual networks
+        azure_rm_virtualnetwork:
+          name: "{{ vnet.name }}"
+          resource_group: "{{ rg.name }}"
+          state: absent
+        loop: "{{ vnet.subnet }}"
+      ignore_errors: yes
+
+
+      - name: Delete storage account
+        azure_rm_storageaccount:
+          resource_group: "{{ rg.name }}"
+          name: "{{ sa.name }}{{ item.name }}"
+          account_type: Standard_LRS
+          state: absent
+        loop: "{{ vm }}"
+      ignore_errors: yes
+
+      - name: Delete a resource group
+        azure_rm_resourcegroup:
+          name: "{{ rg.name }}"
+          state: absent
+          force: yes
+        when: rg.delete

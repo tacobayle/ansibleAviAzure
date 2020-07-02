@@ -1,0 +1,36 @@
+---
+- hosts: localhost
+  connection: local
+  gather_facts: no
+
+  vars_files:
+    - "../../creds/credentialsAwsNicolasBayleAppAzure-api.yml"
+    - "vars/params.yml"
+
+  vars:
+    azureEnv:
+      AZURE_CLIENT_ID: "{{ azure.clientId }}"
+      AZURE_SECRET: "{{ azure.secret }}"
+      AZURE_SUBSCRIPTION_ID: "{{ azure.subscriptionId }}"
+      AZURE_TENANT: "{{ azure.tenant }}"
+
+  environment: "{{ azureEnv }}"
+
+  tasks:
+
+    - name: Delete a resource group
+      azure_rm_resourcegroup:
+        name: "{{ item.name }}"
+        state: absent
+        force: yes
+      loop: "{{ rg }}"
+      loop_control:
+        label: "{{ item.name }}"
+      ignore_errors: yes
+
+    - name: Delete a resource group called NetworkWatcherRG
+      azure_rm_resourcegroup:
+        name: NetworkWatcherRG
+        state: absent
+        force: yes
+      ignore_errors: yes
